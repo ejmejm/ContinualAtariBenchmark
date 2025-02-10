@@ -44,7 +44,6 @@ def run_benchmark(cfg: DictConfig) -> None:
   total_reward = 0
   total_mse = 0
   step_times: List[float] = []
-  step_memories: List[float] = []
   metrics_history: List[Tuple[int, float]] = []
   
   # Create results directory
@@ -60,7 +59,6 @@ def run_benchmark(cfg: DictConfig) -> None:
   env = ContinualAtariEnv(cfg.game_sequence, cfg.steps_per_game)
   
   # Initialize
-  init_memory = process.memory_info().rss / 1024 / 1024  # MB
   if cfg.benchmark_type == 'control':
     state = init_fn(env.observation_space.shape, env.action_space.n)
   else:
@@ -71,9 +69,8 @@ def run_benchmark(cfg: DictConfig) -> None:
   
   # Run episodes
   for step in range(total_steps):
-    # Track step time and memory
+    # Track step time
     start_time = time.time()
-    pre_mem = process.memory_info().rss / 1024 / 1024
     
     if cfg.benchmark_type == 'control':
       state, action = step_fn(state, prev_obs, obs, 0.0)  # Initial reward=0
@@ -94,9 +91,7 @@ def run_benchmark(cfg: DictConfig) -> None:
     
     # Track performance
     step_time = time.time() - start_time
-    step_mem = process.memory_info().rss / 1024 / 1024 - pre_mem
     step_times.append(step_time)
-    step_memories.append(step_mem)
     
     if (step + 1) % 1000 == 0:
       current_game = cfg.game_sequence[step // cfg.steps_per_game]
@@ -104,7 +99,6 @@ def run_benchmark(cfg: DictConfig) -> None:
         'step': step,
         'game': current_game,
         'avg_step_time': np.mean(step_times),
-        'avg_memory_per_step': np.mean(step_memories)
       }
       if cfg.benchmark_type == 'control':
         metrics['avg_reward'] = metric
@@ -120,9 +114,7 @@ def run_benchmark(cfg: DictConfig) -> None:
   # Save final results
   final_metrics = {
     'total_steps': total_steps,
-    'init_memory_mb': init_memory,
     'avg_step_time_ms': np.mean(step_times) * 1000,
-    'avg_memory_per_step_mb': np.mean(step_memories)
   }
   
   if cfg.benchmark_type == 'control':
@@ -157,5 +149,5 @@ def main(cfg: DictConfig) -> None:
   run_benchmark(cfg)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
   main()
