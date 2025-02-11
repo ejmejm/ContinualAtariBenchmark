@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Any, Dict, Tuple
 
 import numpy as np
 
@@ -8,5 +8,5 @@ def init(observation_shape: Tuple[int, ...], num_actions: int) -> Any:
 
 
 # Random action agent example
-def step(state: Any, previous_observation: np.ndarray, observation: np.ndarray, reward: float) -> Tuple[Any, int]:
-    return state, np.random.randint(state['num_actions'])
+def step(state: Any, previous_observation: np.ndarray, observation: np.ndarray, reward: float) -> Tuple[Any, int, Dict[str, float]]:
+    return state, np.random.randint(state['num_actions']), {}

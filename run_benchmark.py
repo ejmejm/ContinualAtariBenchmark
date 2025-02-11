@@ -1,3 +1,4 @@
+from collections import defaultdict
 from pathlib import Path
 import sys
 import time
@@ -47,7 +48,7 @@ def run_benchmark(cfg: DictConfig) -> None:
     total_reward = 0
     total_mse = 0
     step_times: List[float] = []
-    metrics_history: List[Tuple[int, float]] = []
+    metrics_history: List[Tuple[int, Dict[str, float]]] = []
     
     # Create results directory
     results_dir = Path('results')
@@ -71,43 +72,55 @@ def run_benchmark(cfg: DictConfig) -> None:
     reward = 0
     prev_obs = obs
     
+    running_metrics = defaultdict(float)
+    
     # Run episodes
     for step in range(1, total_steps + 1):
         # Track step time
         start_time = time.time()
         
         if cfg.benchmark_type == 'control':
-            state, action = step_fn(state, prev_obs, obs, 0.0)    # Initial reward=0
+            state, action, custom_metrics = step_fn(state, prev_obs, obs, 0.0)    # Initial reward=0
             next_obs, reward, terminated, truncated, info = env.step(action)
             total_reward += reward
-            metric = total_reward / (step + 1)
-            metrics_history.append((step, metric))
-            
+            metrics = {
+                # 'avg_reward': total_reward / (step + 1),
+                'reward': reward,
+                **custom_metrics,
+            }
+            metrics_history.append((step, metrics))
+        
         else: # Prediction
-            state, value_pred = step_fn(state, prev_obs, obs, reward)
+            state, value_pred, custom_metrics = step_fn(state, prev_obs, obs, reward)
             action = behavior_agent.act(obs, info)
             next_obs, reward, terminated, truncated, info = env.step(action)
             # For now use dummy MSE since we don't have true values
             mse = (value_pred - 0.0) ** 2    # Compare to dummy value of 0
             total_mse += mse
-            metric = total_mse / (step + 1)
-            metrics_history.append((step, metric))
+            metrics = {
+                # 'avg_baseline_mse': total_mse / (step + 1),
+                'baseline_mse': mse,
+                **custom_metrics,
+            }
+            metrics_history.append((step, metrics))
+        
+        for key, value in metrics.items():
+            running_metrics[key] += value
         
         # Track performance
         step_time = time.time() - start_time
         step_times.append(step_time)
         
-        if step % 1000 == 0:
+        if step % cfg.log_freq == 0:
             current_game = cfg.game_order[step // cfg.steps_per_game]
             metrics = {
                 'step': step,
                 'game': current_game,
-                'avg_step_time': np.mean(step_times[-1000:]),
+                'avg_step_time': np.mean(step_times[-cfg.log_freq:]),
             }
-            if cfg.benchmark_type == 'control':
-                metrics['avg_reward'] = metric
-            else:
-                metrics['avg_mse'] = metric
+            for key, value in running_metrics.items():
+                metrics[key] = value / cfg.log_freq
+            running_metrics.clear()
             log_metrics(metrics, step, cfg)
         
         prev_obs = obs
@@ -121,10 +134,11 @@ def run_benchmark(cfg: DictConfig) -> None:
         'avg_step_time': np.mean(step_times),
     }
     
-    if cfg.benchmark_type == 'control':
-        final_metrics['final_avg_reward'] = total_reward / total_steps
-    else:
-        final_metrics['final_avg_mse'] = total_mse / total_steps
+    # Create stats for each metric that is stored every step
+    metric_keys = metrics_history[0][1].keys()
+    
+    for key in metric_keys:
+        final_metrics[f'final_avg_{key}'] = np.mean([metrics[1][key] for metrics in metrics_history])
     
     # Save metrics to file
     with open(results_dir / 'metrics.txt', 'w') as f:
@@ -134,15 +148,18 @@ def run_benchmark(cfg: DictConfig) -> None:
     # Plot learning curve
     plt.figure(figsize=(10, 6))
     steps, metrics = zip(*metrics_history)
-    plt.plot(steps, metrics)
-    plt.xlabel('Steps')
-    plt.ylabel('Average Reward' if cfg.benchmark_type == 'control' else 'Average MSE')
-    plt.title(f'Learning Curve - {cfg.benchmark_type.capitalize()} Benchmark')
-    plt.savefig(results_dir / 'learning_curve.png')
-    plt.close()
+    for metric_name in metric_keys:
+        formatted_metric_name = metric_name.replace('_', ' ').capitalize()
+        plt.plot(steps, [metrics[metric_name] for metrics in metrics_history])
+        plt.xlabel('Steps')
+        plt.ylabel(formatted_metric_name)
+        plt.title(f'Learning Curve - {formatted_metric_name} Benchmark')
+        plt.savefig(results_dir / f'{metric_name}.png')
+        plt.close()
     
     if cfg.use_wandb:
-        wandb.log(final_metrics)
+        for key, value in final_metrics.items():
+            wandb.run.summary[key] = value
         wandb.finish()
 
 

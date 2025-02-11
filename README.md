@@ -13,16 +13,17 @@ For the control benchmark, you must implement the following functions:
 def init(observation_shape: Tuple[int, ...], num_actions: int) -> Any:
     pass
 
-def step(state: Any, previous_observation: np.ndarray, observation: np.ndarray, reward: float) -> Tuple[Any, int]:
+def step(state: Any, previous_observation: np.ndarray, observation: np.ndarray, reward: float) -> Tuple[Any, int, Dict[str, float]]:
     pass
 ```
 
 The `init` function should initialize anything your algorithm needs (like model weights).
 The value it returns will be passed to the `step` function every timestep as the first argument.
 
-The `step` function should return a tuple of the form `(state, action)`.
+The `step` function should return a tuple of the form `(state, action, custom_metrics)`.
 The `state` will be passed to the `step` function the next timestep as the first argument.
 The `action` will be the action taken by the agent at this timestep.
+The `custom_metrics` will be a dictionary of metrics that will be logged for this timestep.
 
 The performance on the control benchmark is evaluated by the cumulative reward over the course of the benchmark.
 
@@ -34,16 +35,17 @@ For the prediction benchmark, you must implement the following functions:
 def init(observation_shape: Tuple[int, ...]) -> Any:
     pass
 
-def step(state: Any, previous_observation: np.ndarray, observation: np.ndarray, reward: float) -> Tuple[Any, float]:
+def step(state: Any, previous_observation: np.ndarray, observation: np.ndarray, reward: float) -> Tuple[Any, float, Dict[str, float]]:
     pass
 ```
 
 The `init` function should initialize anything your algorithm needs (like model weights).
 The value it returns will be passed to the `step` function every timestep as the first argument.
 
-The `step` function should return a tuple of the form `(state, prediction)`.
+The `step` function should return a tuple of the form `(state, prediction, custom_metrics)`.
 The `state` will be passed to the `step` function the next timestep as the first argument.
 The `prediction` will be the prediction of the value for the current observation and pre-trained, fixed policy that provides the actions (which are not known to the algorithm) in this benchmark.
+The `custom_metrics` will be a dictionary of metrics that will be logged for this timestep.
 
 The performance on the prediction benchmark is evaluated by the mean squared error of the predicted value and our own value function.
 Our value function has no time limit and is trained to convergence, so it serves as an upper bound for what is possible.
