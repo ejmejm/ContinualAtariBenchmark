@@ -1,8 +1,10 @@
 import logging
+from pathlib import Path
 import sys
 from typing import Dict, List, Optional
 
-sys.path.append('pfrl/')
+# Add pfrl directory to path
+sys.path.append(str(Path(__file__).parent / 'pfrl'))
 sys.path.append('../')
 
 import cv2
@@ -106,7 +108,7 @@ class PretrainedAtariAgent:
     def _env_name_to_model_name(self, env_name: str) -> str:
         # Original models were trained with NoFrameskip-v4 versions, but I have made corresponding
         # Changes to the v5 environnments to make them compatible.
-        return env_name.replace('ALE/', '').replace('v5', 'v4')
+        return env_name.replace('ALE/', '').replace('-v5', 'NoFrameskip-v4')
     
     def get_action_remapping(self, original_action_set: List[int], new_action_set: List[int]) -> List[int]:
         return [new_action_set.index(action) if action in new_action_set else -1 for action in original_action_set]
