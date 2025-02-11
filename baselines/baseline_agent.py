@@ -38,12 +38,10 @@ def download_atari_models(games: List[str]) -> List[str]:
 
 
 def make_rainbow_agent(
-        env: gym.Env,
+        n_actions: int,
         model_path: Optional[str] = None,
     ) -> agents.CategoricalDoubleDQN:
     """Makes a Rainbow agent and loads a pretrained model if provided."""
-    n_actions = env.action_space.n
-
     n_atoms = 51
     v_max = 10
     v_min = -10
@@ -64,7 +62,7 @@ def make_rainbow_agent(
         explorer = None,
         minibatch_size = 2,
         replay_start_size = 10,
-        target_update_interval = 10,
+        target_update_interval = 4,
         update_interval = 4,
         batch_accumulator = 'mean',
         phi = lambda x: np.asarray(x, dtype=np.float32) / 255,
@@ -123,7 +121,7 @@ class PretrainedAtariAgent:
         # Load the pretrained model
         logger.info(f'Loading pretrained model for {self.game_name}')
         self.agent = make_rainbow_agent(
-            self.env,
+            len(self.minimal_action_set),
             self.model_paths[self._env_name_to_model_name(self.game_name)],
         )
         
@@ -132,7 +130,7 @@ class PretrainedAtariAgent:
     
     def _preprocess_observation(self, obs: np.ndarray, prior_info: Dict) -> np.ndarray:
         if 'skipped_frames' in prior_info and len(prior_info['skipped_frames']) > 0:
-            obs = np.stack(prior_info['skipped_frames'][-1], obs).max(axis=0) # Max pool over prior and current frame
+            obs = np.stack([prior_info['skipped_frames'][-1], obs]).max(axis=0) # Max pool over prior and current frame
         
         obs = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
         obs = cv2.resize(
