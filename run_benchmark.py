@@ -2,7 +2,7 @@ from collections import defaultdict
 from pathlib import Path
 import sys
 import time
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Optional
 
 sys.path.append('baselines/')
 
@@ -14,6 +14,7 @@ from omegaconf import DictConfig
 import matplotlib.pyplot as plt
 import numpy as np
 import wandb
+import cv2
 
 from env import ContinualAtariEnv
 from baseline_agent import PretrainedAtariAgent
@@ -34,6 +35,22 @@ def log_metrics(metrics: Dict[str, float], step: int, cfg: DictConfig) -> None:
     print(f"Step {step}: {metrics}")
     if cfg.use_wandb:
         wandb.log(metrics, step=step)
+
+
+def setup_video_writer(shape: Tuple[int, ...], fps: int, path: str) -> cv2.VideoWriter:
+    """Sets up a VideoWriter object for saving gameplay footage.
+    
+    Args:
+        shape: Shape of the frames (height, width, channels)
+        fps: Frames per second for the output video
+        path: Path where the video will be saved
+    
+    Returns:
+        VideoWriter object configured for MP4 output
+    """
+    height, width = shape[:2]
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    return cv2.VideoWriter(path, fourcc, fps, (width, height))
 
 
 def run_benchmark(cfg: DictConfig) -> None:
@@ -59,7 +76,11 @@ def run_benchmark(cfg: DictConfig) -> None:
     total_steps = len(cfg.game_order) * cfg.steps_per_game
     
     # Create continual learning environment
-    env = ContinualAtariEnv(cfg.game_order, cfg.steps_per_game)
+    env = ContinualAtariEnv(
+        cfg.game_order,
+        cfg.steps_per_game,
+        render_mode = 'rgb_array' if cfg.save_video else None,
+    )
     
     # Initialize
     if cfg.benchmark_type == 'control':
@@ -72,12 +93,25 @@ def run_benchmark(cfg: DictConfig) -> None:
     reward = 0
     prev_obs = obs
     
+    # Setup video recording if enabled
+    video_writer: Optional[cv2.VideoWriter] = None
+    if cfg.save_video:
+        video_path = str(results_dir / 'benchmark.mp4')
+        video_writer = setup_video_writer(env.render().shape, fps=15, path=video_path)
+    
     running_metrics = defaultdict(float)
     
     # Run episodes
     for step in range(1, total_steps + 1):
         # Track step time
         start_time = time.time()
+        
+        # Save video frame if enabled
+        if cfg.save_video:
+            frame = env.render()
+            # OpenCV expects BGR format
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            video_writer.write(frame_bgr)
         
         if cfg.benchmark_type == 'control':
             state, action, custom_metrics = step_fn(state, prev_obs, obs, 0.0)    # Initial reward=0
@@ -125,6 +159,10 @@ def run_benchmark(cfg: DictConfig) -> None:
         
         prev_obs = obs
         obs = next_obs
+    
+    # Cleanup video writer if it exists
+    if video_writer is not None:
+        video_writer.release()
     
     env.close()
     

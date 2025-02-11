@@ -10,12 +10,14 @@ class ContinualAtariEnv(gym.Env):
         game_order: List[str],
         steps_per_game: int,
         randomize_game_order: bool = False,
+        render_mode: str = None,
     ):
         super().__init__()
         
         self.game_order = game_order
         self.steps_per_game = steps_per_game
         self.randomize_game_order = randomize_game_order
+        self.render_mode = render_mode
         self.frameskip = 4 # Manually frameskip so that I have access to skipped frames
         self.current_game_idx = 0
         self.current_step = 0
@@ -27,7 +29,7 @@ class ContinualAtariEnv(gym.Env):
         self.curr_game = None
         self.terminated = False
         
-    def reset(self, seed: Union[int, None] = None) -> Tuple[np.ndarray, Dict]:
+    def reset(self, seed: Union[int, None] = None, **kwargs) -> Tuple[np.ndarray, Dict]:
         if self.curr_game is not None:
             self.curr_game.close()
             
@@ -45,8 +47,9 @@ class ContinualAtariEnv(gym.Env):
             self.game_order[self.current_game_idx],
             full_action_space = True,
             frameskip = 1,
+            render_mode = self.render_mode,
         )
-        obs, info = self.curr_game.reset(seed=seed)
+        obs, info = self.curr_game.reset(seed=seed, **kwargs)
         
         info['terminated'] = False
         info['truncated'] = False
@@ -71,6 +74,7 @@ class ContinualAtariEnv(gym.Env):
                 self.game_order[self.current_game_idx],
                 full_action_space = True,
                 frameskip = 1,
+                render_mode = self.render_mode,
             )
             self.seed = self.seed + 1 if self.seed is not None else None
             obs, info = self.curr_game.reset(seed=self.seed)
@@ -105,3 +109,9 @@ class ContinualAtariEnv(gym.Env):
         self.current_step += 1
         
         return obs, total_reward, False, False, info
+    
+    def render(self) -> np.ndarray:
+        return self.curr_game.render()
+    
+    def close(self) -> None:
+        self.curr_game.close()

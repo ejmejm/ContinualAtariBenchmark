@@ -6,6 +6,7 @@ benchmark_type: 'control'  # 'control' or 'prediction'
 steps_per_game: 500
 use_wandb: false
 log_freq: 100
+save_video: true
 
 # List of Atari games to run in sequence
 game_order:
