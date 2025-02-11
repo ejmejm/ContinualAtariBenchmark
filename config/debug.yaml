@@ -1,0 +1,21 @@
+defaults:
+  - _self_
+
+# Benchmark settings
+benchmark_type: 'control'  # 'control' or 'prediction'
+steps_per_game: 500
+use_wandb: false
+log_freq: 100
+
+# List of Atari games to run in sequence
+game_order:
+  - 'ALE/Pong-v5'
+  - 'ALE/Breakout-v5'
+  - 'ALE/SpaceInvaders-v5'
+  - 'ALE/MsPacman-v5'
+  - 'ALE/Asterix-v5'
+
+# Wandb settings
+wandb:
+  project: 'continual_atari_debug'
+  entity: null  # Set to your wandb username 

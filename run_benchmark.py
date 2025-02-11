@@ -163,7 +163,7 @@ def run_benchmark(cfg: DictConfig) -> None:
         wandb.finish()
 
 
-@hydra.main(version_base=None, config_path="config", config_name="benchmark_config")
+@hydra.main(version_base=None, config_path='config', config_name='benchmark')
 def main(cfg: DictConfig) -> None:
     """Main entry point for running the benchmark."""
     gym.register_envs(ale_py)
