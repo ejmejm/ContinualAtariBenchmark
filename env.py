@@ -44,7 +44,7 @@ class ContinualAtariEnv(gym.Env):
         self.curr_game = gym.make(
             self.game_order[self.current_game_idx],
             full_action_space = True,
-            frameskip = 0,
+            frameskip = 1,
         )
         obs, info = self.curr_game.reset(seed=seed)
         
@@ -70,7 +70,7 @@ class ContinualAtariEnv(gym.Env):
             self.curr_game = gym.make(
                 self.game_order[self.current_game_idx],
                 full_action_space = True,
-                frameskip = 0,
+                frameskip = 1,
             )
             self.seed = self.seed + 1 if self.seed is not None else None
             obs, info = self.curr_game.reset(seed=self.seed)
