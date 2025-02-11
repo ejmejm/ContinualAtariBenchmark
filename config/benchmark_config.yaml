@@ -7,7 +7,7 @@ steps_per_game: 10000
 use_wandb: false
 
 # List of Atari games to run in sequence
-game_sequence:
+game_order:
   - 'ALE/Pong-v5'
   - 'ALE/Breakout-v5'
   - 'ALE/SpaceInvaders-v5'

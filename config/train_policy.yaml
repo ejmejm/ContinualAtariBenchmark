@@ -1,0 +1,15 @@
+defaults:
+  - _self_
+  - benchmark_config
+
+
+train:
+  model_name: 'ppo_atari'
+  n_envs: 2
+  total_timesteps: 10000000
+
+
+# Wandb settings
+wandb:
+  project: 'continual_atari_train_policy'
+  entity: null  # Set to your wandb username 

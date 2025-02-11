@@ -5,11 +5,12 @@ import numpy as np
 
 
 class ContinualAtariEnv(gym.Env):
-    def __init__(self, game_sequence: List[str], steps_per_game: int):
+    def __init__(self, game_order: List[str], steps_per_game: int, randomize_game_order: bool = False):
         super().__init__()
         
-        self.game_sequence = game_sequence
+        self.game_order = game_order
         self.steps_per_game = steps_per_game
+        self.randomize_game_order = randomize_game_order
         self.current_game_idx = 0
         self.current_step = 0
         self.seed = None
@@ -29,21 +30,25 @@ class ContinualAtariEnv(gym.Env):
         self.terminated = False
         self.seed = seed
         
-        self.env = gym.make(self.game_sequence[self.current_game_idx], full_action_space=True)
-        print(self.env.action_space)
+        if self.randomize_game_order:
+            rng = np.random.default_rng(seed)
+            new_order = rng.permutation(len(self.game_order)).tolist()
+            self.game_order = [self.game_order[i] for i in new_order]
+        
+        self.env = gym.make(self.game_order[self.current_game_idx], full_action_space=True)
         obs, info = self.env.reset(seed=seed)
         
         return obs, info
     
     def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict]:
         if self.current_step >= self.steps_per_game:
-            self.current_game_idx = (self.current_game_idx + 1) % len(self.game_sequence)
+            self.current_game_idx = (self.current_game_idx + 1) % len(self.game_order)
             self.current_step = 0
             
             if self.env is not None:
                 self.env.close()
                 
-            self.env = gym.make(self.game_sequence[self.current_game_idx], full_action_space=True)
+            self.env = gym.make(self.game_order[self.current_game_idx], full_action_space=True)
             print(self.env.action_space)
             self.seed = self.seed + 1 if self.seed is not None else None
             obs, info = self.env.reset(seed=self.seed)

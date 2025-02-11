@@ -47,16 +47,15 @@ def run_benchmark(cfg: DictConfig) -> None:
   metrics_history: List[Tuple[int, float]] = []
   
   # Create results directory
-  results_dir = Path("results")
+  results_dir = Path('results')
   results_dir.mkdir(exist_ok=True)
   
   setup_wandb(cfg)
   
-  process = psutil.Process()
-  total_steps = len(cfg.game_sequence) * cfg.steps_per_game
+  total_steps = len(cfg.game_order) * cfg.steps_per_game
   
   # Create continual learning environment
-  env = ContinualAtariEnv(cfg.game_sequence, cfg.steps_per_game)
+  env = ContinualAtariEnv(cfg.game_order, cfg.steps_per_game)
   
   # Initialize
   if cfg.benchmark_type == 'control':
@@ -68,7 +67,7 @@ def run_benchmark(cfg: DictConfig) -> None:
   prev_obs = obs
   
   # Run episodes
-  for step in range(total_steps):
+  for step in range(1, total_steps + 1):
     # Track step time
     start_time = time.time()
     
@@ -93,12 +92,12 @@ def run_benchmark(cfg: DictConfig) -> None:
     step_time = time.time() - start_time
     step_times.append(step_time)
     
-    if (step + 1) % 1000 == 0:
-      current_game = cfg.game_sequence[step // cfg.steps_per_game]
+    if step % 1000 == 0:
+      current_game = cfg.game_order[step // cfg.steps_per_game]
       metrics = {
         'step': step,
         'game': current_game,
-        'avg_step_time': np.mean(step_times),
+        'avg_step_time': np.mean(step_times[-1000:]),
       }
       if cfg.benchmark_type == 'control':
         metrics['avg_reward'] = metric
@@ -114,7 +113,7 @@ def run_benchmark(cfg: DictConfig) -> None:
   # Save final results
   final_metrics = {
     'total_steps': total_steps,
-    'avg_step_time_ms': np.mean(step_times) * 1000,
+    'avg_step_time': np.mean(step_times),
   }
   
   if cfg.benchmark_type == 'control':
@@ -142,7 +141,7 @@ def run_benchmark(cfg: DictConfig) -> None:
     wandb.finish()
 
 
-@hydra.main(version_base=None, config_path="config", config_name="config")
+@hydra.main(version_base=None, config_path="config", config_name="benchmark_config")
 def main(cfg: DictConfig) -> None:
   """Main entry point for running the benchmark."""
   gym.register_envs(ale_py)
