@@ -112,7 +112,7 @@ def run_benchmark(cfg: DictConfig) -> None:
         step_times.append(step_time)
         
         if step % cfg.log_freq == 0:
-            current_game = cfg.game_order[step // cfg.steps_per_game]
+            current_game = env.get_current_game().spec.id
             metrics = {
                 'step': step,
                 'game': current_game,
@@ -150,7 +150,7 @@ def run_benchmark(cfg: DictConfig) -> None:
     steps, metrics = zip(*metrics_history)
     for metric_name in metric_keys:
         formatted_metric_name = metric_name.replace('_', ' ').capitalize()
-        plt.plot(steps, [metrics[metric_name] for metrics in metrics_history])
+        plt.plot(steps, [metrics_dict[metric_name] for metrics_dict in metrics])
         plt.xlabel('Steps')
         plt.ylabel(formatted_metric_name)
         plt.title(f'Learning Curve - {formatted_metric_name} Benchmark')
