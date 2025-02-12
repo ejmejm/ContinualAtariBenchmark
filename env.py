@@ -11,6 +11,7 @@ class ContinualAtariEnv(gym.Env):
         steps_per_game: int,
         randomize_game_order: bool = False,
         render_mode: str = None,
+        bin_reward: bool = True,
     ):
         super().__init__()
         
@@ -18,6 +19,7 @@ class ContinualAtariEnv(gym.Env):
         self.steps_per_game = steps_per_game
         self.randomize_game_order = randomize_game_order
         self.render_mode = render_mode
+        self.bin_reward = bin_reward
         self.frameskip = 4 # Manually frameskip so that I have access to skipped frames
         self.current_game_idx = 0
         self.current_step = 0
@@ -98,6 +100,9 @@ class ContinualAtariEnv(gym.Env):
             obs, reward, terminated, truncated, info = self.curr_game.step(action)
             skipped_frames.append(obs)
             total_reward += reward
+        
+        if self.bin_reward:
+            total_reward = np.sign(total_reward)
         
         self.terminated = terminated or truncated
         info['terminated'] = self.terminated

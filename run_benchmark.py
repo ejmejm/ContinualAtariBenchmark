@@ -132,8 +132,9 @@ def run_benchmark(cfg: DictConfig) -> None:
             mse = (value_pred - 0.0) ** 2    # Compare to dummy value of 0
             total_mse += mse
             metrics = {
-                # 'avg_baseline_mse': total_mse / (step + 1),
                 'baseline_mse': mse,
+                'value_prediction': value_pred,
+                '_reward': reward,
                 **custom_metrics,
             }
             metrics_history.append((step, metrics))
@@ -153,7 +154,8 @@ def run_benchmark(cfg: DictConfig) -> None:
                 'avg_step_time': np.mean(step_times[-cfg.log_freq:]),
             }
             for key, value in running_metrics.items():
-                metrics[key] = value / cfg.log_freq
+                if not key.startswith('_'):
+                    metrics[key] = value / cfg.log_freq
             running_metrics.clear()
             log_metrics(metrics, step, cfg)
         
@@ -166,6 +168,19 @@ def run_benchmark(cfg: DictConfig) -> None:
     
     env.close()
     
+    # Add difference between value predictions and discounted returns to metrics
+    if cfg.benchmark_type == 'prediction':
+        value_preds = np.array([metrics[1]['value_prediction'] for metrics in metrics_history])
+        rewards = np.array([metrics[1]['_reward'] for metrics in metrics_history])
+        returns = rewards.copy()
+        for i in range(len(returns) - 2, -1, -1):
+            returns[i] += cfg.discount_factor * returns[i + 1]
+        
+        mse = (value_preds - returns) ** 2
+        for i, (step, metrics) in enumerate(metrics_history):
+            metrics['return'] = returns[i]
+            metrics['return_mse'] = mse[i]
+    
     # Save final results
     final_metrics = {
         'total_steps': total_steps,
@@ -176,7 +191,8 @@ def run_benchmark(cfg: DictConfig) -> None:
     metric_keys = metrics_history[0][1].keys()
     
     for key in metric_keys:
-        final_metrics[f'final_avg_{key}'] = np.mean([metrics[1][key] for metrics in metrics_history])
+        if not key.startswith('_'):
+            final_metrics[f'final_avg_{key}'] = np.mean([metrics[1][key] for metrics in metrics_history])
     
     # Save metrics to file
     with open(results_dir / 'metrics.txt', 'w') as f:
@@ -187,6 +203,8 @@ def run_benchmark(cfg: DictConfig) -> None:
     plt.figure(figsize=(10, 6))
     steps, metrics = zip(*metrics_history)
     for metric_name in metric_keys:
+        if metric_name.startswith('_'):
+            continue
         formatted_metric_name = metric_name.replace('_', ' ').capitalize()
         plt.plot(steps, [metrics_dict[metric_name] for metrics_dict in metrics])
         plt.xlabel('Steps')

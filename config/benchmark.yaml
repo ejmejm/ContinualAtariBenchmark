@@ -7,6 +7,7 @@ steps_per_game: 10000
 use_wandb: false
 log_freq: 1000
 save_video: false
+discount_factor: 0.98
 
 # List of Atari games to run in sequence
 game_order:
