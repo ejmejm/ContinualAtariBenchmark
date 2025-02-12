@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 import sys
 import time
@@ -67,9 +68,12 @@ def run_benchmark(cfg: DictConfig) -> None:
     step_times: List[float] = []
     metrics_history: List[Tuple[int, Dict[str, float]]] = []
     
-    # Create results directory
+    # Create results directory with datetime subfolder
     results_dir = Path('results')
     results_dir.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    run_dir = results_dir / timestamp
+    run_dir.mkdir(exist_ok=True)
     
     setup_wandb(cfg)
     
@@ -96,7 +100,7 @@ def run_benchmark(cfg: DictConfig) -> None:
     # Setup video recording if enabled
     video_writer: Optional[cv2.VideoWriter] = None
     if cfg.save_video:
-        video_path = str(results_dir / 'benchmark.mp4')
+        video_path = str(run_dir / 'benchmark.mp4')
         video_writer = setup_video_writer(env.render().shape, fps=15, path=video_path)
     
     running_metrics = defaultdict(float)
@@ -195,7 +199,7 @@ def run_benchmark(cfg: DictConfig) -> None:
             final_metrics[f'final_avg_{key}'] = np.mean([metrics[1][key] for metrics in metrics_history])
     
     # Save metrics to file
-    with open(results_dir / 'metrics.txt', 'w') as f:
+    with open(run_dir / 'metrics.txt', 'w') as f:
         for key, value in final_metrics.items():
             f.write(f"{key}: {value}\n")
     
@@ -210,7 +214,7 @@ def run_benchmark(cfg: DictConfig) -> None:
         plt.xlabel('Steps')
         plt.ylabel(formatted_metric_name)
         plt.title(f'Learning Curve - {formatted_metric_name} Benchmark')
-        plt.savefig(results_dir / f'{metric_name}.png')
+        plt.savefig(run_dir / f'{metric_name}.png')
         plt.close()
     
     if cfg.use_wandb:
