@@ -58,7 +58,7 @@ def run_benchmark(cfg: DictConfig) -> None:
     """Runs the continual learning benchmark based on config settings."""
     
     # Import correct module based on benchmark type
-    module = importlib.import_module(cfg.benchmark_type)
+    module = importlib.import_module(f'{cfg.benchmark_type}.{cfg.method}')
     init_fn = module.init
     step_fn = module.step
     
@@ -179,6 +179,7 @@ def run_benchmark(cfg: DictConfig) -> None:
         returns = rewards.copy()
         for i in range(len(returns) - 2, -1, -1):
             returns[i] += cfg.discount_factor * returns[i + 1]
+        returns = np.concatenate([returns[:-1], [0]])
         
         mse = (value_preds - returns) ** 2
         for i, (step, metrics) in enumerate(metrics_history):
@@ -210,10 +211,19 @@ def run_benchmark(cfg: DictConfig) -> None:
         if metric_name.startswith('_'):
             continue
         formatted_metric_name = metric_name.replace('_', ' ').capitalize()
-        plt.plot(steps, [metrics_dict[metric_name] for metrics_dict in metrics])
+        y_values = [metrics_dict[metric_name] for metrics_dict in metrics]
+        plt.plot(steps, y_values)
         plt.xlabel('Steps')
         plt.ylabel(formatted_metric_name)
         plt.title(f'Learning Curve - {formatted_metric_name} Benchmark')
+        
+        y_top = np.percentile(y_values, 95)
+        y_bottom = np.percentile(y_values, 5)
+        y_range = y_top - y_bottom
+        y_top = y_top + y_range * 0.1
+        y_bottom = y_bottom - y_range * 0.1
+        plt.ylim(y_bottom, y_top)
+        
         plt.savefig(run_dir / f'{metric_name}.png')
         plt.close()
     

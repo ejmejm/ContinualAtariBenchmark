@@ -2,20 +2,21 @@ defaults:
   - _self_
 
 # Benchmark settings
-benchmark_type: 'control'  # 'control' or 'prediction'
-steps_per_game: 200
+benchmark_type: 'prediction'  # 'control' or 'prediction'
+method: 'template'  # 'template' or 'td0'
+steps_per_game: 10000
 use_wandb: false
-log_freq: 50
+log_freq: 1000
 save_video: false
-discount_factor: 0.98
+discount_factor: 0.9
 
 # List of Atari games to run in sequence
 game_order:
   - 'ALE/Pong-v5'
   - 'ALE/Breakout-v5'
   - 'ALE/SpaceInvaders-v5'
-  - 'ALE/MsPacman-v5'
-  - 'ALE/Asterix-v5'
+  # - 'ALE/MsPacman-v5'
+  # - 'ALE/Asterix-v5'
 
 # Wandb settings
 wandb:

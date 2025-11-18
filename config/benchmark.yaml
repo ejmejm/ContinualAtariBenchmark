@@ -3,11 +3,12 @@ defaults:
 
 # Benchmark settings
 benchmark_type: 'control'  # 'control' or 'prediction'
+method: 'template'  # 'template' or 'td0'
 steps_per_game: 10000
 use_wandb: false
 log_freq: 1000
 save_video: false
-discount_factor: 0.98
+discount_factor: 0.9
 
 # List of Atari games to run in sequence
 game_order:
