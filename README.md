@@ -5,6 +5,46 @@ In both benchmarks, a single agent interacts with an Atari game, and generates a
 Every 10,000 timesteps, the game is changed to a new Atari game based on a predetermined sequence of games.
 This switch happens 20 times, after which the benchmark ends.
 
+## Installation
+
+Install the package using pip:
+
+```bash
+pip install -e .
+```
+
+Or install directly from the repository:
+
+```bash
+pip install git+https://github.com/ejmejm/ContinualAtariBenchmark
+```
+
+## Usage
+
+After installation, you can easily import and use the environment:
+
+```python
+import gymnasium as gym
+import continual_atari_benchmark
+
+# Option 1: Use the registered environment
+env = gym.make("ContinualAtari-v0")
+
+# Option 2: Import directly
+from continual_atari_benchmark import ContinualAtariEnv, DEFAULT_GAME_ORDER
+
+env = ContinualAtariEnv(
+    game_order=DEFAULT_GAME_ORDER,
+    steps_per_game=10000,
+    randomize_game_order=False,
+    bin_reward=True,
+)
+
+# Use the environment
+obs, info = env.reset()
+obs, reward, terminated, truncated, info = env.step(action)
+```
+
 ### Control Benchmark
 
 For the control benchmark, you must implement the following functions:
