@@ -15,7 +15,7 @@ from pfrl import replay_buffers, utils
 from pfrl import nn as pnn
 from pfrl.q_functions import DistributionalDuelingDQN
 
-from env import ContinualAtariEnv
+from continual_atari_benchmark import ContinualAtariEnv
 
 
 logger = logging.getLogger(__name__)

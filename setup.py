@@ -28,10 +28,5 @@ setup(
         "numpy>=1.24.4",
         "ale-py>=0.8.1",
     ],
-    entry_points={
-        "gymnasium.envs": [
-            "__root__ = continual_atari_benchmark:register_envs",
-        ],
-    },
 )
 

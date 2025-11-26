@@ -17,7 +17,7 @@ import numpy as np
 import wandb
 import cv2
 
-from env import ContinualAtariEnv
+from continual_atari_benchmark import ContinualAtariEnv
 from baseline_agent import PretrainedAtariAgent
 
 
