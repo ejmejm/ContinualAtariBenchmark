@@ -9,9 +9,11 @@ Observations are saved in compressed chunks to avoid OOM on large runs.
 Usage:
     python dataset/collect.py
     python dataset/collect.py games="['ALE/Pong-v5']" seeds="[0]" num_steps=1000
+    python dataset/collect.py num_workers=4
 """
 
 import logging
+import multiprocessing as mp
 from pathlib import Path
 import sys
 
@@ -22,6 +24,7 @@ import gymnasium as gym
 import hydra
 import numpy as np
 from omegaconf import DictConfig
+from tqdm import tqdm
 
 from baseline_agent import PretrainedAtariAgent
 from continual_atari_benchmark import ContinualAtariEnv
@@ -54,7 +57,8 @@ def sanitize_game_name(game_name):
     return game_name.replace('ALE/', '').replace('-v5', '')
 
 
-def collect_game_data(game, seed, num_steps, bin_reward, output_dir):
+def collect_game_data(game, seed, num_steps, bin_reward, output_dir,
+                      progress_queue=None):
     """Play a game with the pretrained agent and save trajectory data.
 
     Plays at least num_steps macro-steps (each is FRAMESKIP raw frames).
@@ -63,7 +67,12 @@ def collect_game_data(game, seed, num_steps, bin_reward, output_dir):
     is truncated to exactly num_steps.
 
     Observations are flushed to disk in compressed chunks to limit memory usage.
+
+    If progress_queue is provided, sends step counts to it for external progress
+    tracking. Otherwise displays its own tqdm bar.
     """
+    gym.register_envs(ale_py)
+
     # Create env the same way ContinualAtariEnv does
     env = gym.make(game, full_action_space=True, frameskip=1)
 
@@ -88,7 +97,8 @@ def collect_game_data(game, seed, num_steps, bin_reward, output_dir):
     obs_chunk = []
     chunk_idx = 0
 
-    obs, info = env.reset(seed=seed)
+    rng = np.random.RandomState(seed)
+    obs, info = env.reset(seed=int(rng.randint(2**31)))
     terminated = False
 
     # Build initial info dict matching ContinualAtariEnv format
@@ -101,6 +111,10 @@ def collect_game_data(game, seed, num_steps, bin_reward, output_dir):
     }
 
     step = 0
+    pbar = None
+    if progress_queue is None:
+        pbar = tqdm(total=num_steps, desc=game_name, unit='step')
+
     while step < num_steps or not terminated:
         # Get action and value prediction
         action, value = behavior_agent.act_with_value(obs, prior_info)
@@ -130,7 +144,6 @@ def collect_game_data(game, seed, num_steps, bin_reward, output_dir):
             if len(obs_chunk) >= OBS_CHUNK_SIZE:
                 chunk_path = out_path / f'seed_{seed}_obs_{chunk_idx:03d}.npz'
                 np.savez_compressed(chunk_path, observations=np.array(obs_chunk, dtype=np.uint8))
-                logger.info(f'  Saved obs chunk {chunk_idx} ({len(obs_chunk)} frames)')
                 obs_chunk = []
                 chunk_idx += 1
 
@@ -144,22 +157,26 @@ def collect_game_data(game, seed, num_steps, bin_reward, output_dir):
         }
 
         if terminated:
-            seed = seed + 1 if seed is not None else None
-            obs, info = env.reset(seed=seed)
+            obs, info = env.reset(seed=int(rng.randint(2**31)))
             prior_info['reset'] = True
             prior_info['skipped_frames'] = []
         else:
             obs = next_obs
 
         step += 1
+        if pbar is not None:
+            pbar.update(1)
+        elif step <= num_steps:
+            progress_queue.put((game, seed, 1))
 
+    if pbar is not None:
+        pbar.close()
     env.close()
 
     # Flush remaining observation chunk
     if obs_chunk:
         chunk_path = out_path / f'seed_{seed}_obs_{chunk_idx:03d}.npz'
         np.savez_compressed(chunk_path, observations=np.array(obs_chunk, dtype=np.uint8))
-        logger.info(f'  Saved obs chunk {chunk_idx} ({len(obs_chunk)} frames)')
 
     # Convert small arrays
     actions_arr = np.array(actions, dtype=np.int32)
@@ -187,24 +204,87 @@ def collect_game_data(game, seed, num_steps, bin_reward, output_dir):
         returns=returns,
     )
 
-    logger.info(
-        f'{game} seed={seed}: collected {step} steps '
-        f'(truncated to {num_steps}), '
-        f'{chunk_idx + 1} obs chunks, '
-        f'avg reward={rewards_arr.mean():.3f}, '
-        f'avg value={value_preds_arr.mean():.3f}, '
-        f'avg return={returns.mean():.3f}'
-    )
+    return (f'{game} seed={seed}: collected {step} steps '
+            f'(truncated to {num_steps}), '
+            f'{chunk_idx + 1} obs chunks, '
+            f'avg reward={rewards_arr.mean():.3f}, '
+            f'avg value={value_preds_arr.mean():.3f}, '
+            f'avg return={returns.mean():.3f}')
+
+
+def _worker(args):
+    """Multiprocessing worker that calls collect_game_data."""
+    game, seed, num_steps, bin_reward, output_dir, progress_queue = args
+    progress_queue.put(('START', game, seed))
+    result = collect_game_data(game, seed, num_steps, bin_reward, output_dir,
+                               progress_queue)
+    progress_queue.put(('DONE', game, seed))
+    return result
 
 
 @hydra.main(version_base=None, config_path='.', config_name='collect_config')
 def main(cfg: DictConfig):
     gym.register_envs(ale_py)
 
-    for game in cfg.games:
-        for seed in cfg.seeds:
-            logger.info(f'Collecting data for {game} with seed {seed}...')
-            collect_game_data(game, seed, cfg.num_steps, cfg.bin_reward, cfg.output_dir)
+    num_workers = cfg.get('num_workers', 1)
+    jobs = [(game, seed) for game in cfg.games for seed in cfg.seeds]
+
+    if num_workers <= 1:
+        # Sequential — each job gets its own tqdm bar
+        for game, seed in jobs:
+            result = collect_game_data(game, seed, cfg.num_steps,
+                                       cfg.bin_reward, cfg.output_dir)
+            logger.info(result)
+    else:
+        # Parallel — fixed bars, one per worker slot, reused across jobs
+        manager = mp.Manager()
+        progress_queue = manager.Queue()
+
+        worker_args = [
+            (game, seed, cfg.num_steps, cfg.bin_reward, cfg.output_dir,
+             progress_queue)
+            for game, seed in jobs
+        ]
+
+        # Create one persistent bar per worker slot
+        slot_bars = [tqdm(total=cfg.num_steps, desc='(idle)', unit='step',
+                          position=i) for i in range(num_workers)]
+        free_slots = list(range(num_workers))
+        job_to_slot = {}
+
+        pool = mp.Pool(num_workers)
+        async_result = pool.map_async(_worker, worker_args)
+        pool.close()
+
+        # Drain progress queue until all workers finish
+        done_count = 0
+        while done_count < len(jobs):
+            msg = progress_queue.get()
+            if msg[0] == 'START':
+                _, game, seed = msg
+                slot = free_slots.pop(0)
+                job_to_slot[(game, seed)] = slot
+                label = f'{sanitize_game_name(game)} s{seed}'
+                slot_bars[slot].reset(total=cfg.num_steps)
+                slot_bars[slot].set_description(label)
+            elif msg[0] == 'DONE':
+                _, game, seed = msg
+                slot = job_to_slot.pop((game, seed))
+                slot_bars[slot].set_description('(idle)')
+                free_slots.append(slot)
+                done_count += 1
+            else:
+                game, seed, delta = msg
+                slot_bars[job_to_slot[(game, seed)]].update(delta)
+
+        for bar in slot_bars:
+            bar.close()
+
+        results = async_result.get()
+        pool.join()
+        print()
+        for result in results:
+            logger.info(result)
 
     logger.info('Done collecting all datasets.')
 
