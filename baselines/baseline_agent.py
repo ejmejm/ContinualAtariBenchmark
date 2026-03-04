@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 # Add pfrl directory to path
 sys.path.append(str(Path(__file__).parent / 'pfrl'))
@@ -10,6 +10,7 @@ sys.path.append('../')
 import cv2
 import gymnasium as gym
 import numpy as np
+import torch
 from pfrl import agents
 from pfrl import replay_buffers, utils
 from pfrl import nn as pnn
@@ -150,11 +151,29 @@ class PretrainedAtariAgent:
         if self.game_name != prior_info['game_name']:
             self.game_name = prior_info['game_name']
             self._process_game_change()
-        
+
         if prior_info['reset']:
             self._process_game_reset()
-        
+
         obs = self._preprocess_observation(obs, prior_info)
         action = self.agent.act(obs)
         action = self.action_remapping[action]
         return action
+
+    def act_with_value(self, obs: np.ndarray, prior_info: Dict) -> Tuple[int, float]:
+        """Returns (action, max_expected_q_value) in a single forward pass."""
+        if self.game_name != prior_info['game_name']:
+            self.game_name = prior_info['game_name']
+            self._process_game_change()
+
+        if prior_info['reset']:
+            self._process_game_reset()
+
+        obs = self._preprocess_observation(obs, prior_info)
+        batch_xs = self.agent.batch_states([obs], self.agent.device, self.agent.phi)
+        with torch.no_grad():
+            action_value = self.agent.model(batch_xs)
+            value = action_value.max.item()
+            greedy_action = action_value.greedy_actions.item()
+        action = self.action_remapping[greedy_action]
+        return action, value

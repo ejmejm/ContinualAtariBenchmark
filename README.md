@@ -89,3 +89,7 @@ The `custom_metrics` will be a dictionary of metrics that will be logged for thi
 
 The performance on the prediction benchmark is evaluated by the mean squared error of the predicted value and our own value function.
 Our value function has no time limit and is trained to convergence, so it serves as an upper bound for what is possible.
+
+### Citations
+
+If you use this benchmark, please be sure to cite the ChainerRL library, which is where the pretrained policies were obtained from. Details can be found [here](https://github.com/pfnet/pfrl).

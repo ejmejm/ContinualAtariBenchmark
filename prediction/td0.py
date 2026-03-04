@@ -80,7 +80,7 @@ def init(observation_shape: Tuple[int, ...]) -> PredictorState:
     return PredictorState(
         model = model,
         optimizer = optimizer,
-        gamma = 0.9,
+        gamma = 0.99,
         obs_decay = 0.99,
         obs_avg = np.zeros(observation_shape),
         obs_sq_avg = np.zeros(observation_shape),

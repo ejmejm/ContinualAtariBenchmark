@@ -4,3 +4,4 @@ outputs/
 results/*
 wandb/
 *.egg-info/
+dataset/data/

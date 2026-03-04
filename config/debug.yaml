@@ -8,7 +8,11 @@ steps_per_game: 10000
 use_wandb: false
 log_freq: 1000
 save_video: false
-discount_factor: 0.9
+
+# Pre-recorded data settings (prediction benchmark only)
+use_prerecorded: false
+prerecorded_data_dir: 'dataset/data'
+prerecorded_seed: 0
 
 # List of Atari games to run in sequence
 game_order:

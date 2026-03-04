@@ -1,0 +1,31 @@
+defaults:
+  - _self_
+
+# Games to collect trajectory data for
+games:
+  - 'ALE/Pong-v5'
+  - 'ALE/Breakout-v5'
+  - 'ALE/SpaceInvaders-v5'
+  - 'ALE/MsPacman-v5'
+  - 'ALE/Asterix-v5'
+  - 'ALE/Qbert-v5'
+  - 'ALE/Seaquest-v5'
+  - 'ALE/BeamRider-v5'
+  - 'ALE/Phoenix-v5'
+  - 'ALE/Atlantis-v5'
+  - 'ALE/Asteroids-v5'
+  - 'ALE/BattleZone-v5'
+  - 'ALE/Centipede-v5'
+  - 'ALE/DemonAttack-v5'
+  - 'ALE/Enduro-v5'
+  - 'ALE/FishingDerby-v5'
+  - 'ALE/IceHockey-v5'
+  - 'ALE/Jamesbond-v5'
+  - 'ALE/Kangaroo-v5'
+  - 'ALE/RoadRunner-v5'
+
+# Collection settings
+num_steps: 10000
+seeds: [0, 1, 2]
+bin_reward: true
+output_dir: 'dataset/data'

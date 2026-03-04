@@ -19,6 +19,21 @@ import cv2
 
 from continual_atari_benchmark import ContinualAtariEnv
 from baseline_agent import PretrainedAtariAgent
+from dataset.dataset_loader import PrerecordedDataset
+
+GAMMA = 0.99
+
+
+def compute_returns(rewards, dones):
+    """Compute discounted returns respecting episode boundaries."""
+    returns = np.zeros(len(rewards), dtype=np.float64)
+    returns[-1] = rewards[-1]
+    for i in range(len(rewards) - 2, -1, -1):
+        if dones[i]:
+            returns[i] = rewards[i]
+        else:
+            returns[i] = rewards[i] + GAMMA * returns[i + 1]
+    return returns
 
 
 def setup_wandb(cfg: DictConfig) -> None:
@@ -77,63 +92,101 @@ def run_benchmark(cfg: DictConfig) -> None:
     
     setup_wandb(cfg)
     
+    use_prerecorded = (cfg.benchmark_type == 'prediction'
+                       and cfg.get('use_prerecorded', False))
+
     total_steps = len(cfg.game_order) * cfg.steps_per_game
-    
-    # Create continual learning environment
-    env = ContinualAtariEnv(
-        cfg.game_order,
-        cfg.steps_per_game,
-        render_mode = 'rgb_array' if cfg.save_video else None,
-    )
-    
-    # Initialize
-    if cfg.benchmark_type == 'control':
-        state = init_fn(env.observation_space.shape, env.action_space.n)
+
+    if use_prerecorded:
+        # Load pre-recorded dataset instead of live environment
+        dataset = PrerecordedDataset(
+            cfg.prerecorded_data_dir,
+            cfg.game_order,
+            cfg.steps_per_game,
+            seed=cfg.prerecorded_seed,
+        )
+        state = init_fn(dataset.observation_shape)
+        prev_obs = dataset.get_obs(0)
+        reward = 0.0
+        env = None
     else:
-        state = init_fn(env.observation_space.shape)
-        behavior_agent = PretrainedAtariAgent(env)
-            
-    obs, info = env.reset()
-    reward = 0
-    prev_obs = obs
-    
-    # Setup video recording if enabled
+        # Create continual learning environment
+        env = ContinualAtariEnv(
+            cfg.game_order,
+            cfg.steps_per_game,
+            render_mode = 'rgb_array' if cfg.save_video else None,
+        )
+
+        # Initialize
+        if cfg.benchmark_type == 'control':
+            state = init_fn(env.observation_space.shape, env.action_space.n)
+        else:
+            state = init_fn(env.observation_space.shape)
+            behavior_agent = PretrainedAtariAgent(env)
+
+        obs, info = env.reset()
+        reward = 0
+        prev_obs = obs
+
+    # Setup video recording if enabled (live mode only)
     video_writer: Optional[cv2.VideoWriter] = None
-    if cfg.save_video:
+    if cfg.save_video and env is not None:
         video_path = str(run_dir / 'benchmark.mp4')
         video_writer = setup_video_writer(env.render().shape, fps=15, path=video_path)
-    
+
     running_metrics = defaultdict(float)
-    
+    done_flags: List[bool] = []
+
     # Run episodes
     for step in range(1, total_steps + 1):
         # Track step time
         start_time = time.time()
-        
+
         # Save video frame if enabled
-        if cfg.save_video:
+        if cfg.save_video and env is not None:
             frame = env.render()
-            # OpenCV expects BGR format
             frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             video_writer.write(frame_bgr)
-        
-        if cfg.benchmark_type == 'control':
-            state, action, custom_metrics = step_fn(state, prev_obs, obs, 0.0)    # Initial reward=0
+
+        if use_prerecorded:
+            i = step - 1
+            obs = dataset.get_obs(i)
+            state, value_pred, custom_metrics = step_fn(state, prev_obs, obs, reward)
+
+            reward = dataset.get_reward(i)
+            baseline_value = dataset.get_value_prediction(i)
+            actual_return = dataset.get_return(i)
+
+            baseline_mse = (value_pred - baseline_value) ** 2
+            return_mse = (value_pred - actual_return) ** 2
+
+            metrics = {
+                'baseline_mse': baseline_mse,
+                'return_mse': return_mse,
+                'value_prediction': value_pred,
+                '_reward': reward,
+                **custom_metrics,
+            }
+            metrics_history.append((step, metrics))
+            prev_obs = obs
+
+        elif cfg.benchmark_type == 'control':
+            state, action, custom_metrics = step_fn(state, prev_obs, obs, 0.0)
             next_obs, reward, terminated, truncated, info = env.step(action)
             total_reward += reward
             metrics = {
-                # 'avg_reward': total_reward / (step + 1),
                 'reward': reward,
                 **custom_metrics,
             }
             metrics_history.append((step, metrics))
-        
-        else: # Prediction
+            prev_obs = obs
+            obs = next_obs
+
+        else:  # Live prediction
             state, value_pred, custom_metrics = step_fn(state, prev_obs, obs, reward)
             action = behavior_agent.act(obs, info)
             next_obs, reward, terminated, truncated, info = env.step(action)
-            # For now use dummy MSE since we don't have true values
-            mse = (value_pred - 0.0) ** 2    # Compare to dummy value of 0
+            mse = (value_pred - 0.0) ** 2
             total_mse += mse
             metrics = {
                 'baseline_mse': mse,
@@ -142,45 +195,46 @@ def run_benchmark(cfg: DictConfig) -> None:
                 **custom_metrics,
             }
             metrics_history.append((step, metrics))
-        
+            done_flags.append(terminated or truncated)
+            prev_obs = obs
+            obs = next_obs
+
         for key, value in metrics.items():
             running_metrics[key] += value
-        
+
         # Track performance
         step_time = time.time() - start_time
         step_times.append(step_time)
-        
+
         if step % cfg.log_freq == 0:
-            current_game = env.get_current_game().spec.id
-            metrics = {
+            if use_prerecorded:
+                current_game = dataset.get_game_name(step - 1)
+            else:
+                current_game = env.get_current_game().spec.id
+            log_data = {
                 'step': step,
                 'game': current_game,
                 'avg_step_time': np.mean(step_times[-cfg.log_freq:]),
             }
             for key, value in running_metrics.items():
                 if not key.startswith('_'):
-                    metrics[key] = value / cfg.log_freq
+                    log_data[key] = value / cfg.log_freq
             running_metrics.clear()
-            log_metrics(metrics, step, cfg)
-        
-        prev_obs = obs
-        obs = next_obs
-    
-    # Cleanup video writer if it exists
+            log_metrics(log_data, step, cfg)
+
+    # Cleanup
     if video_writer is not None:
         video_writer.release()
-    
-    env.close()
-    
-    # Add difference between value predictions and discounted returns to metrics
-    if cfg.benchmark_type == 'prediction':
-        value_preds = np.array([metrics[1]['value_prediction'] for metrics in metrics_history])
-        rewards = np.array([metrics[1]['_reward'] for metrics in metrics_history])
-        returns = rewards.copy()
-        for i in range(len(returns) - 2, -1, -1):
-            returns[i] += cfg.discount_factor * returns[i + 1]
-        returns = np.concatenate([returns[:-1], [0]])
-        
+    if env is not None:
+        env.close()
+
+    # Compute returns for live prediction mode (prerecorded already has them)
+    if cfg.benchmark_type == 'prediction' and not use_prerecorded:
+        value_preds = np.array([m[1]['value_prediction'] for m in metrics_history])
+        rewards = np.array([m[1]['_reward'] for m in metrics_history])
+        dones = np.array(done_flags, dtype=bool)
+        returns = compute_returns(rewards, dones)
+
         mse = (value_preds - returns) ** 2
         for i, (step, metrics) in enumerate(metrics_history):
             metrics['return'] = returns[i]
