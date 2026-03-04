@@ -10,6 +10,7 @@ __version__ = "0.1.0"
 from gymnasium.envs.registration import register
 
 from continual_atari_benchmark.env import ContinualAtariEnv
+from continual_atari_benchmark.dataset_loader import PrerecordedDataset
 
 
 # Default game sequences for the benchmark
@@ -57,6 +58,7 @@ register_envs()
 
 __all__ = [
     "ContinualAtariEnv",
+    "PrerecordedDataset",
     "DEFAULT_GAME_ORDER",
     "register_envs",
 ]
