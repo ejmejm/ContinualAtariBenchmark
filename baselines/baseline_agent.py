@@ -15,11 +15,27 @@ from pfrl import agents
 from pfrl import replay_buffers, utils
 from pfrl import nn as pnn
 from pfrl.q_functions import DistributionalDuelingDQN
-
 from continual_atari_benchmark import ContinualAtariEnv
 
 
 logger = logging.getLogger(__name__)
+
+# The pfrl pretrained models were trained with old atari-py, which computed different
+# minimal action sets than current ale-py for some games. This table overrides
+# getMinimalActionSet() with functionally equivalent action sets for the current ALE.
+#
+# The pfrl models were trained with old atari-py (Stella ~v2.x, 2007), where the FIRE
+# button worked as a weapon trigger in Assault. In current ale-py (newer Stella), only
+# the UP joystick direction fires — matching actual Atari 2600 hardware. The minimal
+# action set includes RIGHTFIRE/LEFTFIRE (FIRE button combos, now inert) but not
+# UPRIGHT/UPLEFT (UP combos needed to shoot). We swap them so shooting works.
+#
+# Key: game name from _env_name_to_model_name (e.g. 'AssaultNoFrameskip-v4')
+# Value: list of ALE action IDs producing equivalent behavior to what the model learned
+PFRL_TRAINING_ACTION_SETS = {
+    # Swap RIGHTFIRE(11)->UPRIGHT(6), LEFTFIRE(12)->UPLEFT(7)
+    'AssaultNoFrameskip-v4': [0, 1, 2, 3, 4, 6, 7],
+}
 
 
 def download_atari_models(games: List[str]) -> List[str]:
@@ -114,16 +130,25 @@ class PretrainedAtariAgent:
     
     def _process_game_change(self):
         curr_game = self.env.get_current_game()
-        self.minimal_action_set = curr_game.unwrapped.ale.getMinimalActionSet()
-        self.action_set = curr_game.unwrapped._action_set
+        model_name = self._env_name_to_model_name(self.game_name)
+
+        # Use the training action set if we have an override, otherwise fall back
+        # to the current ale-py minimal action set.
+        if model_name in PFRL_TRAINING_ACTION_SETS:
+            self.minimal_action_set = PFRL_TRAINING_ACTION_SETS[model_name]
+            logger.info(f'Using overridden training action set for {model_name}: {self.minimal_action_set}')
+        else:
+            self.minimal_action_set = [int(a) for a in curr_game.unwrapped.ale.getMinimalActionSet()]
+
+        self.action_set = [int(a) for a in curr_game.unwrapped._action_set]
         self.action_remapping = self.get_action_remapping(self.minimal_action_set, self.action_set)
         self.prev_frames = []
-        
+
         # Load the pretrained model
         logger.info(f'Loading pretrained model for {self.game_name}')
         self.agent = make_rainbow_agent(
             len(self.minimal_action_set),
-            self.model_paths[self._env_name_to_model_name(self.game_name)],
+            self.model_paths[model_name],
         )
         
     def _process_game_reset(self):
