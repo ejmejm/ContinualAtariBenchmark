@@ -12,6 +12,7 @@ Usage:
     python dataset/collect.py num_workers=4
 """
 
+import json
 import logging
 import multiprocessing as mp
 from pathlib import Path
@@ -203,6 +204,10 @@ def collect_game_data(game, seed, num_steps, bin_reward, output_dir,
         value_predictions=value_preds_arr,
         returns=returns,
     )
+
+    # Update cross-seed return statistics for this game
+    from compute_stats import compute_and_save_game_stats
+    compute_and_save_game_stats(out_path)
 
     return (f'{game} seed={seed}: collected {step} steps '
             f'(truncated to {num_steps}), '
