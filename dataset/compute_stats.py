@@ -26,14 +26,19 @@ def compute_and_save_game_stats(game_dir: Path) -> dict | None:
         return None
 
     all_returns = []
+    all_rewards = []
     for npz_path in seed_files:
         data = np.load(npz_path)
         all_returns.append(data['returns'])
+        all_rewards.append(data['rewards'])
 
     returns = np.concatenate(all_returns)
+    rewards = np.concatenate(all_rewards)
     stats = {
         'return_mean': float(np.mean(returns)),
         'return_std': float(np.std(returns)),
+        'reward_mean': float(np.mean(rewards)),
+        'reward_std': float(np.std(rewards)),
         'num_seeds': len(seed_files),
         'num_steps': int(len(returns)),
     }
@@ -63,10 +68,9 @@ def main():
         if stats is None:
             print(f'{game_dir.name}: no data, skipping')
             continue
-        print(f'{game_dir.name} ({stats["num_seeds"]} seeds, '
-              f'{stats["num_steps"]} steps): '
-              f'mean={stats["return_mean"]:.2f}, '
-              f'std={stats["return_std"]:.2f}')
+        print(f'{game_dir.name} ({stats["num_seeds"]} seeds, {stats["num_steps"]} steps): '
+              f'return mean={stats["return_mean"]:.2f}, std={stats["return_std"]:.2f} | '
+              f'reward mean={stats["reward_mean"]:.2f}, std={stats["reward_std"]:.2f}')
 
     print('Done.')
 
